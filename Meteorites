@@ -1,0 +1,226 @@
+---
+title: "meteorites"
+author: "Dylan Mangel"
+date: "6/10/2019"
+output: html_document
+---
+
+```{r, include=FALSE}
+library(tidyverse)
+library(lubridate)
+```
+Import data and adjust structure
+```{r setup, include=FALSE}
+mete <- readr::read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-06-11/meteorites.csv")
+
+str(mete)
+mete$name_type <- factor(mete$name_type)
+mete$class <- factor(mete$class)
+mete$fall <- factor(mete$fall)
+mete$name_type <- factor(mete$name_type)
+```
+
+Data Exploration
+```{r}
+plot(mete$year,mete$lat)
+plot(mete$year,mete$long)
+plot(mete$lat~mete$long, pch=19, cex=.05)
+
+ggplot(mete, aes(x = year)) +
+        geom_histogram(aes(y = ..count..), binwidth = 1) +
+        scale_x_continuous(name = "Year", limits=c(1900, 2020)) +
+        scale_y_continuous(name = "Count")
+
+ggplot(mete, aes(x = mass)) +
+        geom_histogram(aes(y = ..count..), binwidth = 1) +
+        scale_x_continuous(name = "Mass", limits=c(0, 250)) +
+        scale_y_continuous(name = "Count")
+```
+
+Coordinates to Countries Function
+```{r}
+library(sp)
+library(rworldmap)
+
+# The single argument to this function, points, is a data.frame in which:
+#   - column 1 contains the longitude in degrees
+#   - column 2 contains the latitude in degrees
+coords2country = function(points)
+{  
+  countriesSP <- getMap(resolution='low')
+  #countriesSP <- getMap(resolution='high') #you could use high res map from rworldxtra if you were concerned about detail
+
+  # convert our list of points to a SpatialPoints object
+
+  # pointsSP = SpatialPoints(points, proj4string=CRS(" +proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs +towgs84=0,0,0"))
+
+  #setting CRS directly to that from rworldmap
+  pointsSP = SpatialPoints(points, proj4string=CRS(proj4string(countriesSP)))  
+
+
+  # use 'over' to get indices of the Polygons object containing each point 
+  indices = over(pointsSP, countriesSP)
+
+  # return the ADMIN names of each country
+  indices$ADMIN  
+  #indices$ISO3 # returns the ISO3 code 
+  #indices$continent   # returns the continent (6 continent model)
+  #indices$REGION   # returns the continent (7 continent model)
+}
+
+# set up some points to test
+points = data.frame(lon=c(8.38333, 5, 10, 15, 20), lat=c(19.08333, 50, 48.5, 47, 44.5))
+
+
+coords2country(points)
+
+```
+
+Countries of Mete dataframe
+```{r}
+#subset
+library(dplyr)
+#mete1 <- select(filter(mete, mete$fall == "Fell"), c(name:geolocation))
+mete2 <- filter(mete, !is.na(mete$lat))  #remove na
+
+points = data.frame(lon=mete2$long, lat=mete2$lat)
+
+points$country <- coords2country(points) #not sure if I still need this in the code.
+
+mete2$country <- points$country
+
+```
+
+
+link to world Fact Sheet
+```{r}
+library(readxl)
+countryMeta <- read_csv("countryMeta.csv")
+countryMeta <- countryMeta %>% rename(country = Country)
+
+#structure
+str(countryMeta)
+countryMeta$country <- factor(countryMeta$country)
+
+
+fullMete <- full_join(mete2,countryMeta, by="country")
+rm(points, mete2, countryMeta)
+```
+
+FullMete Structure
+```{r}
+str(fullMete)
+fullMete$Region <- factor(fullMete$Region)
+```
+
+
+
+
+
+
+Make a Table and combine count with the country data
+```{r}
+plotTab <-aggregate(fullMete, by=list(fullMete$country), 
+  FUN=mean, na.rm=TRUE)
+print(plotTab)
+plotTab <- plotTab %>% rename(remove = country)
+plotTab <- plotTab %>% rename(country = 'Group.1')
+
+
+meteCount <- count(fullMete, c(country))
+meteCount <- meteCount %>% rename(country = 'c(country)')
+meteCount <- drop_na(meteCount,country)
+
+ctm <- full_join(meteCount,plotTab, by="country")
+```
+
+Structure Final Dataset
+```{r}
+str(ctm)
+ctm$country <- factor(ctm$country)
+ctm <- ctm %>% rename(area = `Area (sq. mi.)`)
+ctm <- ctm %>% rename(popDen = `Pop. Density (per sq. mi.)`)
+ctm <- ctm %>% rename(gdp = `GDP ($ per capita)` )
+ctm <- ctm %>% rename(arablePct = `Arable (%)` )
+ctm <- ctm %>% rename(cropsPct =`Crops (%)`  )
+ctm <- ctm %>% rename(otherPct = `Other (%)` )
+ctm <- ctm %>% rename(phones = `Phones (per 1000)` )
+```{r}
+p <- ggplot(ctm, aes(x = phones)) +
+        geom_point(aes(y = n)) 
+p
+p + ylim(0, 5000)
+p + ylim(0, 1000)
+p + ylim(0, 250)
+```
+
+
+
+
+
+
+
+
+
+Subset just the US metes
+```{r}
+usMete <- filter(fullMete, fullMete$country=="United States of America")
+usMete <- filter(usMete, usMete$lat< 50)
+usMete <- filter(usMete, usMete$lat> 25)
+
+plot(usMete$lat~ usMete$long)
+```
+
+```{r}
+library(ggmap)
+#Load state map
+states <- map_data("state")
+#Plot states
+p <- ggplot(data = states) + 
+  geom_polygon(fill = 'grey60',aes(x = long, y = lat,  group = group), color = "white") + 
+  coord_fixed(1.3) 
+
+p + geom_point(data=usMete, alpha = 1, shape = 20, mapping=aes(x=long, y=lat, size=mass, color=fall))+
+    scale_color_manual(values = c('Found' = 'lightblue','Fell' = 'purple'))+ 
+  ggtitle("Observed and Found Meteorite Impacts in the USA") + 
+     theme(plot.title = element_text(lineheight=.8, face="bold"))+ 
+     ylab("Latitude") + xlab("Longitude")
+```
+
+
+
+```{r}
+library(ggmap)
+#Load state map
+states <- map_data("state")
+#Plot states
+p <- ggplot(data = states) + 
+  geom_polygon(fill = 'grey60',aes(x = long, y = lat,  group = group), color = "white") + 
+  coord_fixed(1.3) 
+
+p + geom_point(data=usMete, alpha = 1, shape = 20, mapping=aes(x=long, y=lat, size=mass, color=fall))+scale_colour_manual(name='Fall Type', values=c('Found'='lightblue', 'Fell'='darkblue'))+
+  scale_size_continuous(name='Mass (g)')+
+  ggtitle("Observed and Found Meteorite Impacts in the USA") + 
+     theme(plot.title = element_text(lineheight=.8, face="bold"))+ 
+     ylab("Latitude") + xlab("Longitude")
+
+#export
+ggsave('usMete8.png', plot = last_plot(), device = NULL, path = NULL,
+       scale = 1, width = 11, height = 6.5, dpi = 1000, limitsize = FALSE,
+       units = c("in", "cm", "mm"))
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

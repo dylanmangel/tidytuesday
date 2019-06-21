@@ -1,1 +1,76 @@
-test
+---
+title: "christmasBird"
+output: html_document
+---
+
+#upload data and structure
+```{r, include=FALSE}
+bird<- readr::read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-06-18/bird_counts.csv")
+str(bird)
+bird$species <- factor(bird$species)
+bird$species_latin <- factor(bird$species_latin)
+```
+
+#packages
+```{r, include=FALSE}
+library(tidyverse)
+```
+
+
+
+Bird Lists
+```{r}
+
+mostCommon <- c("European Starling", "Herring Gull", "Long-tailed Duck", "Greater Scaup", "Canada Goose", "Common Merganser", "Mallard", "Common Goldeneye")
+
+target <- c("Belted Kingfisher", "Barred Owl", "Barn Owl", "Boreal Owl", "Cooper's Hawk", "Bald Eagle", "Eastern Screech-Owl", "Golden Eagle", "Great Gray Owl", "Great Horned Owl", "Gyrfalcon", "Long-eared Owl")
+
+owls <- c("Barred Owl", "Barn Owl", "Boreal Owl","Eastern Screech-Owl","Great Gray Owl", "Great Horned Owl","Long-eared Owl", "Northern Hawk Owl", "Northern Saw-whet Owl", "Short-eared Owl")
+```
+
+
+
+Corrected Filter
+```{r}
+
+filtBirds <- filter(bird, species %in% owls)
+filtBirds <- filter(filtBirds, year>1945)
+
+filtBirds$BirdsPer10Hours <- filtBirds$how_many_counted_by_hour*10
+
+p1 <- ggplot() + geom_line(aes(y = BirdsPer10Hours, x = year, colour=species),
+                           data = filtBirds, stat="identity")
+p1
+
+```
+
+Smooth Lines  
+```{r}
+shortList<- c("Eastern Screech-Owl", "Great Horned Owl","Long-eared Owl", "Short-eared Owl")
+
+filtBirds <- filter(bird, species %in% shortList)
+filtBirds <- filter(filtBirds, year>1945)
+
+filtBirds$BirdsPer10Hours <- filtBirds$how_many_counted_by_hour*10
+
+p4 <- ggplot(filtBirds, aes(year, BirdsPer10Hours, colour=species)) +
+  geom_smooth(span = 0.4, se = FALSE) + ylim(0,3)
+
+p4+ theme_minimal() +ggtitle("65 Years of Owl Observations around Christmas near Hamilton Ontairo") + 
+     theme(plot.title = element_text(lineheight=.8, face="bold"))+ 
+     ylab("Birds Observed Over a 10 Hour Period (Normalized)") + xlab("Year") 
+
+```
+
+
+
+```{r}
+#export
+ggsave('christmasBirds.png', plot = last_plot(), device = NULL, path = NULL,
+       scale = 1, width = 11, height = 6.5, dpi = 1000, limitsize = FALSE,
+       units = c("in", "cm", "mm"))
+```
+
+
+
+
